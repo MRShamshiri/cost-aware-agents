@@ -54,7 +54,17 @@ export async function main(argv: string[]): Promise<void> {
 }
 
 async function readConfig(configPath: string): Promise<ReportInput> {
-  return JSON.parse(await readFile(configPath, "utf8")) as ReportInput;
+  const raw = await readFile(configPath, "utf8");
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch (error) {
+    const details = error instanceof Error ? ` ${error.message}` : "";
+    throw new Error(`Invalid JSON in "${configPath}".${details}`);
+  }
+
+  return validateReportInput(parsed, configPath);
 }
 
 function readFlag(argv: string[], flag: string): string | null {
@@ -70,4 +80,84 @@ Commands:
   report <config.json> [--format json|markdown]
   run [prompt...]
 `);
+}
+
+function validateReportInput(value: unknown, configPath: string): ReportInput {
+  const root = expectRecord(value, configPath);
+  const pricing = expectRecord(root.pricing, `${configPath}.pricing`);
+  const pricingModels = expectRecord(pricing.models, `${configPath}.pricing.models`);
+  const usageValue = root.usage;
+
+  if (!Array.isArray(usageValue) || usageValue.length === 0) {
+    throw new Error(`Invalid config at "${configPath}.usage": expected a non-empty array.`);
+  }
+
+  const usage = usageValue.map((entry, index) => validateUsageRecord(entry, `${configPath}.usage[${index}]`));
+  const currency = root.currency === undefined ? undefined : expectString(root.currency, `${configPath}.currency`);
+  const budget = root.budget === undefined ? undefined : validateBudget(root.budget, `${configPath}.budget`);
+
+  const models = Object.fromEntries(
+    Object.entries(pricingModels).map(([modelName, modelPricing]) => [modelName, validateModelPricing(modelPricing, `${configPath}.pricing.models.${modelName}`)]),
+  );
+
+  return {
+    currency,
+    budget,
+    usage,
+    pricing: { models },
+  };
+}
+
+function validateBudget(value: unknown, path: string): NonNullable<ReportInput["budget"]> {
+  const budget = expectRecord(value, path);
+  return {
+    limit: expectFiniteNumber(budget.limit, `${path}.limit`),
+    currency: expectString(budget.currency, `${path}.currency`),
+  };
+}
+
+function validateUsageRecord(value: unknown, path: string): ReportInput["usage"][number] {
+  const usage = expectRecord(value, path);
+  const provider = usage.provider === undefined ? undefined : expectString(usage.provider, `${path}.provider`);
+  const metadata = usage.metadata === undefined ? undefined : expectRecord(usage.metadata, `${path}.metadata`);
+
+  return {
+    provider,
+    metadata,
+    model: expectString(usage.model, `${path}.model`),
+    inputTokens: expectFiniteNumber(usage.inputTokens, `${path}.inputTokens`),
+    outputTokens: expectFiniteNumber(usage.outputTokens, `${path}.outputTokens`),
+  };
+}
+
+function validateModelPricing(value: unknown, path: string): ReportInput["pricing"]["models"][string] {
+  const pricing = expectRecord(value, path);
+  return {
+    inputPer1M: expectFiniteNumber(pricing.inputPer1M, `${path}.inputPer1M`),
+    outputPer1M: expectFiniteNumber(pricing.outputPer1M, `${path}.outputPer1M`),
+  };
+}
+
+function expectRecord(value: unknown, path: string): Record<string, unknown> {
+  if (!value || Array.isArray(value) || typeof value !== "object") {
+    throw new Error(`Invalid config at "${path}": expected an object.`);
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function expectString(value: unknown, path: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Invalid config at "${path}": expected a non-empty string.`);
+  }
+
+  return value;
+}
+
+function expectFiniteNumber(value: unknown, path: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Invalid config at "${path}": expected a finite number.`);
+  }
+
+  return value;
 }
