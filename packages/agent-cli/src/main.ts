@@ -86,13 +86,18 @@ function validateReportInput(value: unknown, configPath: string): ReportInput {
   const root = expectRecord(value, configPath);
   const pricing = expectRecord(root.pricing, `${configPath}.pricing`);
   const pricingModels = expectRecord(pricing.models, `${configPath}.pricing.models`);
+  const pricingModelNames = Object.keys(pricingModels);
   const usageValue = root.usage;
+
+  if (pricingModelNames.length === 0) {
+    throw new Error(`Invalid config at "${configPath}.pricing.models": expected at least one model pricing entry.`);
+  }
 
   if (!Array.isArray(usageValue) || usageValue.length === 0) {
     throw new Error(`Invalid config at "${configPath}.usage": expected a non-empty array.`);
   }
 
-  const usage = usageValue.map((entry, index) => validateUsageRecord(entry, `${configPath}.usage[${index}]`));
+  const usage = usageValue.map((entry, index) => validateUsageRecord(entry, `${configPath}.usage[${index}]`, pricingModelNames));
   const currency = root.currency === undefined ? undefined : expectString(root.currency, `${configPath}.currency`);
   const budget = root.budget === undefined ? undefined : validateBudget(root.budget, `${configPath}.budget`);
 
@@ -116,15 +121,16 @@ function validateBudget(value: unknown, path: string): NonNullable<ReportInput["
   };
 }
 
-function validateUsageRecord(value: unknown, path: string): ReportInput["usage"][number] {
+function validateUsageRecord(value: unknown, path: string, knownModels: string[]): ReportInput["usage"][number] {
   const usage = expectRecord(value, path);
   const provider = usage.provider === undefined ? undefined : expectString(usage.provider, `${path}.provider`);
   const metadata = usage.metadata === undefined ? undefined : expectRecord(usage.metadata, `${path}.metadata`);
+  const model = expectKnownModel(usage.model, `${path}.model`, knownModels);
 
   return {
     provider,
     metadata,
-    model: expectString(usage.model, `${path}.model`),
+    model,
     inputTokens: expectFiniteNumber(usage.inputTokens, `${path}.inputTokens`),
     outputTokens: expectFiniteNumber(usage.outputTokens, `${path}.outputTokens`),
   };
@@ -152,6 +158,17 @@ function expectString(value: unknown, path: string): string {
   }
 
   return value;
+}
+
+function expectKnownModel(value: unknown, path: string, knownModels: string[]): string {
+  const model = expectString(value, path);
+  if (!knownModels.includes(model)) {
+    throw new Error(
+      `Invalid config at "${path}": model "${model}" is missing from pricing.models. Known models: ${knownModels.join(", ")}.`,
+    );
+  }
+
+  return model;
 }
 
 function expectFiniteNumber(value: unknown, path: string): number {

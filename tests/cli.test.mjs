@@ -57,3 +57,69 @@ test("CLI validates required usage entries", () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Invalid config at ".*invalid-usage\.json\.usage\[0\]\.model": expected a non-empty string\./);
 });
+
+test("CLI validates that pricing models are declared", () => {
+  const fixtureDir = mkdtempSync(path.join(tmpdir(), "cost-aware-agent-cli-"));
+  const configPath = path.join(fixtureDir, "missing-pricing-model.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      pricing: {
+        models: {
+          "mock-fast": {
+            inputPer1M: 0.2,
+            outputPer1M: 0.8,
+          },
+        },
+      },
+      usage: [
+        {
+          model: "mock-slow",
+          inputTokens: 1000,
+          outputTokens: 2000,
+        },
+      ],
+    }),
+    "utf8",
+  );
+
+  const result = spawnSync(process.execPath, ["packages/agent-cli/dist/cli.js", "report", configPath], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /Invalid config at ".*missing-pricing-model\.json\.usage\[0\]\.model": model "mock-slow" is missing from pricing\.models\. Known models: mock-fast\./,
+  );
+});
+
+test("CLI validates that pricing models are not empty", () => {
+  const fixtureDir = mkdtempSync(path.join(tmpdir(), "cost-aware-agent-cli-"));
+  const configPath = path.join(fixtureDir, "empty-pricing-models.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      pricing: {
+        models: {},
+      },
+      usage: [
+        {
+          model: "mock-fast",
+          inputTokens: 1000,
+          outputTokens: 2000,
+        },
+      ],
+    }),
+    "utf8",
+  );
+
+  const result = spawnSync(process.execPath, ["packages/agent-cli/dist/cli.js", "report", configPath], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Invalid config at ".*empty-pricing-models\.json\.pricing\.models": expected at least one model pricing entry\./);
+});
