@@ -54,7 +54,7 @@ export async function main(argv: string[]): Promise<void> {
 }
 
 async function readConfig(configPath: string): Promise<ReportInput> {
-  const raw = await readFile(configPath, "utf8");
+  const raw = await readConfigFile(configPath);
   let parsed: unknown;
 
   try {
@@ -70,7 +70,12 @@ async function readConfig(configPath: string): Promise<ReportInput> {
 function readFlag(argv: string[], flag: string): string | null {
   const index = argv.indexOf(flag);
   if (index === -1) return null;
-  return argv[index + 1] ?? null;
+  const value = argv[index + 1];
+  if (value === undefined || value.startsWith("--")) {
+    throw new Error(`Missing value for ${flag}.`);
+  }
+
+  return value;
 }
 
 function printHelp(): void {
@@ -100,6 +105,11 @@ function validateReportInput(value: unknown, configPath: string): ReportInput {
   const usage = usageValue.map((entry, index) => validateUsageRecord(entry, `${configPath}.usage[${index}]`, pricingModelNames));
   const currency = root.currency === undefined ? undefined : expectString(root.currency, `${configPath}.currency`);
   const budget = root.budget === undefined ? undefined : validateBudget(root.budget, `${configPath}.budget`);
+  if (currency && budget && currency !== budget.currency) {
+    throw new Error(
+      `Invalid config at "${configPath}.budget.currency": expected "${currency}" to match "${configPath}.currency".`,
+    );
+  }
 
   const models = Object.fromEntries(
     Object.entries(pricingModels).map(([modelName, modelPricing]) => [modelName, validateModelPricing(modelPricing, `${configPath}.pricing.models.${modelName}`)]),
@@ -116,7 +126,7 @@ function validateReportInput(value: unknown, configPath: string): ReportInput {
 function validateBudget(value: unknown, path: string): NonNullable<ReportInput["budget"]> {
   const budget = expectRecord(value, path);
   return {
-    limit: expectFiniteNumber(budget.limit, `${path}.limit`),
+    limit: expectPositiveNumber(budget.limit, `${path}.limit`),
     currency: expectString(budget.currency, `${path}.currency`),
   };
 }
@@ -131,17 +141,37 @@ function validateUsageRecord(value: unknown, path: string, knownModels: string[]
     provider,
     metadata,
     model,
-    inputTokens: expectFiniteNumber(usage.inputTokens, `${path}.inputTokens`),
-    outputTokens: expectFiniteNumber(usage.outputTokens, `${path}.outputTokens`),
+    inputTokens: expectNonNegativeInteger(usage.inputTokens, `${path}.inputTokens`),
+    outputTokens: expectNonNegativeInteger(usage.outputTokens, `${path}.outputTokens`),
   };
 }
 
 function validateModelPricing(value: unknown, path: string): ReportInput["pricing"]["models"][string] {
   const pricing = expectRecord(value, path);
   return {
-    inputPer1M: expectFiniteNumber(pricing.inputPer1M, `${path}.inputPer1M`),
-    outputPer1M: expectFiniteNumber(pricing.outputPer1M, `${path}.outputPer1M`),
+    inputPer1M: expectNonNegativeNumber(pricing.inputPer1M, `${path}.inputPer1M`),
+    outputPer1M: expectNonNegativeNumber(pricing.outputPer1M, `${path}.outputPer1M`),
   };
+}
+
+async function readConfigFile(configPath: string): Promise<string> {
+  try {
+    return await readFile(configPath, "utf8");
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error) {
+      const code = String(error.code);
+      if (code === "ENOENT") {
+        throw new Error(`Could not read config "${configPath}": file not found.`);
+      }
+
+      if (code === "EACCES" || code === "EPERM") {
+        throw new Error(`Could not read config "${configPath}": permission denied.`);
+      }
+    }
+
+    const details = error instanceof Error ? ` ${error.message}` : "";
+    throw new Error(`Could not read config "${configPath}".${details}`);
+  }
 }
 
 function expectRecord(value: unknown, path: string): Record<string, unknown> {
@@ -177,4 +207,31 @@ function expectFiniteNumber(value: unknown, path: string): number {
   }
 
   return value;
+}
+
+function expectNonNegativeNumber(value: unknown, path: string): number {
+  const number = expectFiniteNumber(value, path);
+  if (number < 0) {
+    throw new Error(`Invalid config at "${path}": expected a non-negative number, received ${number}.`);
+  }
+
+  return number;
+}
+
+function expectPositiveNumber(value: unknown, path: string): number {
+  const number = expectFiniteNumber(value, path);
+  if (number <= 0) {
+    throw new Error(`Invalid config at "${path}": expected a positive number, received ${number}.`);
+  }
+
+  return number;
+}
+
+function expectNonNegativeInteger(value: unknown, path: string): number {
+  const number = expectFiniteNumber(value, path);
+  if (!Number.isInteger(number) || number < 0) {
+    throw new Error(`Invalid config at "${path}": expected a non-negative integer, received ${number}.`);
+  }
+
+  return number;
 }
