@@ -261,3 +261,82 @@ test("CLI validates that budget currency matches report currency", () => {
     /Invalid config at ".*currency-mismatch\.json\.budget\.currency": expected "USD" to match ".*currency-mismatch\.json\.currency"\./,
   );
 });
+
+test("CLI rejects unknown top-level config fields", () => {
+  const fixtureDir = mkdtempSync(path.join(tmpdir(), "cost-aware-agent-cli-"));
+  const configPath = path.join(fixtureDir, "unknown-top-level.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      pricing: {
+        models: {
+          "mock-fast": {
+            inputPer1M: 0.2,
+            outputPer1M: 0.8,
+          },
+        },
+      },
+      usage: [
+        {
+          model: "mock-fast",
+          inputTokens: 1000,
+          outputTokens: 2000,
+        },
+      ],
+      budegt: {
+        limit: 0.05,
+        currency: "USD",
+      },
+    }),
+    "utf8",
+  );
+
+  const result = spawnSync(process.execPath, ["packages/agent-cli/dist/cli.js", "report", configPath], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /Invalid config at ".*unknown-top-level\.json": unknown field "budegt"\. Allowed fields: budget, currency, pricing, usage\./,
+  );
+});
+
+test("CLI rejects unknown usage fields", () => {
+  const fixtureDir = mkdtempSync(path.join(tmpdir(), "cost-aware-agent-cli-"));
+  const configPath = path.join(fixtureDir, "unknown-usage-field.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      pricing: {
+        models: {
+          "mock-fast": {
+            inputPer1M: 0.2,
+            outputPer1M: 0.8,
+          },
+        },
+      },
+      usage: [
+        {
+          model: "mock-fast",
+          inputTokens: 1000,
+          outputTokens: 2000,
+          outputTokenz: 3000,
+        },
+      ],
+    }),
+    "utf8",
+  );
+
+  const result = spawnSync(process.execPath, ["packages/agent-cli/dist/cli.js", "report", configPath], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /Invalid config at ".*unknown-usage-field\.json\.usage\[0\]": unknown field "outputTokenz"\. Allowed fields: inputTokens, metadata, model, outputTokens, provider\./,
+  );
+});

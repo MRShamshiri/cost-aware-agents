@@ -89,7 +89,9 @@ Commands:
 
 function validateReportInput(value: unknown, configPath: string): ReportInput {
   const root = expectRecord(value, configPath);
+  expectAllowedKeys(root, configPath, ["budget", "currency", "pricing", "usage"]);
   const pricing = expectRecord(root.pricing, `${configPath}.pricing`);
+  expectAllowedKeys(pricing, `${configPath}.pricing`, ["models"]);
   const pricingModels = expectRecord(pricing.models, `${configPath}.pricing.models`);
   const pricingModelNames = Object.keys(pricingModels);
   const usageValue = root.usage;
@@ -125,6 +127,7 @@ function validateReportInput(value: unknown, configPath: string): ReportInput {
 
 function validateBudget(value: unknown, path: string): NonNullable<ReportInput["budget"]> {
   const budget = expectRecord(value, path);
+  expectAllowedKeys(budget, path, ["currency", "limit"]);
   return {
     limit: expectPositiveNumber(budget.limit, `${path}.limit`),
     currency: expectString(budget.currency, `${path}.currency`),
@@ -133,6 +136,7 @@ function validateBudget(value: unknown, path: string): NonNullable<ReportInput["
 
 function validateUsageRecord(value: unknown, path: string, knownModels: string[]): ReportInput["usage"][number] {
   const usage = expectRecord(value, path);
+  expectAllowedKeys(usage, path, ["inputTokens", "metadata", "model", "outputTokens", "provider"]);
   const provider = usage.provider === undefined ? undefined : expectString(usage.provider, `${path}.provider`);
   const metadata = usage.metadata === undefined ? undefined : expectRecord(usage.metadata, `${path}.metadata`);
   const model = expectKnownModel(usage.model, `${path}.model`, knownModels);
@@ -148,6 +152,7 @@ function validateUsageRecord(value: unknown, path: string, knownModels: string[]
 
 function validateModelPricing(value: unknown, path: string): ReportInput["pricing"]["models"][string] {
   const pricing = expectRecord(value, path);
+  expectAllowedKeys(pricing, path, ["inputPer1M", "outputPer1M"]);
   return {
     inputPer1M: expectNonNegativeNumber(pricing.inputPer1M, `${path}.inputPer1M`),
     outputPer1M: expectNonNegativeNumber(pricing.outputPer1M, `${path}.outputPer1M`),
@@ -180,6 +185,19 @@ function expectRecord(value: unknown, path: string): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>;
+}
+
+function expectAllowedKeys(value: Record<string, unknown>, path: string, allowedKeys: string[]): void {
+  const unknownKeys = Object.keys(value).filter((key) => !allowedKeys.includes(key));
+  if (unknownKeys.length === 0) {
+    return;
+  }
+
+  const label = unknownKeys.length === 1 ? "field" : "fields";
+  const unknownList = unknownKeys.map((key) => `"${key}"`).join(", ");
+  throw new Error(
+    `Invalid config at "${path}": unknown ${label} ${unknownList}. Allowed fields: ${allowedKeys.join(", ")}.`,
+  );
 }
 
 function expectString(value: unknown, path: string): string {
