@@ -1,0 +1,24 @@
+{
+  "currency": "USD",
+  "budget": {
+    "limit": 0.05,
+    "currency": "USD"
+  },
+  "pricing": {
+    "models": {
+      "mock-fast": {
+        "inputPer1M": 0.2,
+        "outputPer1M": 0.8
+      }
+    }
+  },
+  "usage": [
+    {
+      "provider": "mock",
+      "model": "mock-fast",
+      "inputTokens": 12000,
+      "outputTokens": 2500
+    }
+  ]
+}
+

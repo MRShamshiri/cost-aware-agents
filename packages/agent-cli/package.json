@@ -1,0 +1,26 @@
+{
+  "name": "@mrshamshiri/agent-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "cost-aware-agent": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "dependencies": {
+    "@mrshamshiri/agent-core": "0.1.0",
+    "@mrshamshiri/cost-core": "0.1.0",
+    "@mrshamshiri/provider-openai-compatible": "0.1.0"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  }
+}
+

@@ -1,0 +1,15 @@
+name: Cost-Aware Agents Budget Check
+description: Estimate LLM API usage cost and fail CI when a budget is exceeded.
+inputs:
+  config:
+    description: Path to cost-aware budget config.
+    required: true
+    default: examples/basic-budget.json
+  format:
+    description: Report format.
+    required: false
+    default: markdown
+runs:
+  using: node20
+  main: packages/agent-cli/dist/cli.js
+

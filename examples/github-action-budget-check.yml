@@ -1,0 +1,17 @@
+name: LLM Budget Check
+
+on:
+  pull_request:
+
+jobs:
+  budget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run build
+      - run: node packages/agent-cli/dist/cli.js report examples/basic-budget.json --format markdown
+

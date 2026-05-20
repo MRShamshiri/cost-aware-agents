@@ -1,0 +1,23 @@
+{
+  "name": "cost-aware-agents-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b packages/cost-core packages/agent-core packages/provider-openai-compatible packages/provider-anthropic-like packages/agent-cli",
+    "clean": "node scripts/clean.mjs",
+    "lint": "tsc -b packages/cost-core packages/agent-core packages/provider-openai-compatible packages/provider-anthropic-like packages/agent-cli --pretty false",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "pack:all": "npm pack --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
